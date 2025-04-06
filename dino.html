@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trex Runner Game</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        overflow: hidden;
+        background-color: white;
+      }
+      canvas {
+        display: block;
+        margin: 0 auto;
+        background-color: #f7f7f7;
+        border: 1px solid #ccc;
+      }
+      .game-over-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        font-size: 24px;
+        z-index: 10;
+      }
+      .game-over-content {
+        text-align: center;
+      }
+      #restartButton {
+        padding: 12px 24px;
+        font-size: 18px;
+        color: white;
+        background-color: #007bff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-top: 20px;
+        transition: background-color 0.3s ease;
+      }
+      #restartButton:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas" width="800" height="300"></canvas>
+    <div class="game-over-overlay" id="gameOverOverlay">
+      <div class="game-over-content">
+        <h2 id="gameOverTitle">Game Over</h2>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button id="restartButton">Restart</button>
+      </div>
+    </div>
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      const gameOverOverlay = document.getElementById("gameOverOverlay");
+      const restartButton = document.getElementById("restartButton");
+      const finalScoreDisplay = document.getElementById("finalScore");
+      const gameOverTitleDisplay = document.getElementById("gameOverTitle");
+
+      let trexImage = new Image();
+      trexImage.src =
+        "https://upload.wikimedia.org/wikipedia/commons/3/3b/Chromium_T-Rex-error-offline.svg";
+
+      let rockImage = new Image();
+      rockImage.src = "public/rockk.svg";
+
+      let birdImage = new Image();
+      birdImage.src = "public/bird.png";
+
+      let trex = {
+        x: 50,
+        y: 260,
+        width: 40,
+        height: 40,
+        velocityY: 0,
+        gravity: 0.9,
+        isJumping: false,
+      };
+
+      let obstacles = [];
+      let frameCount = 0;
+      let isGameOver = false;
+      let score = 0;
+      let obstacleSpeed = 5;
+      let minObstacleDistance = 200;
+      let gameSpeedMultiplier = 1;
+      document.addEventListener("keydown", function (event) {
+        if (
+          (event.key === " " || event.key === "ArrowUp") &&
+          !trex.isJumping &&
+          !isGameOver
+        ) {
+          jump();
+        }
+      });
+
+      document.addEventListener("touchstart", function () {
+        if (!trex.isJumping && !isGameOver) {
+          jump();
+        }
+      });
+
+      restartButton.addEventListener("click", function () {
+        isGameOver = false;
+        score = 0;
+        obstacleSpeed = 5;
+        gameSpeedMultiplier = 1;
+        obstacles = [];
+        trex.x = 50;
+        trex.y = 260;
+        trex.velocityY = 0;
+        trex.isJumping = false;
+        frameCount = 0;
+
+        gameOverOverlay.style.display = "none";
+        gameOverTitleDisplay.textContent = "Game Over";
+
+        requestAnimationFrame(gameLoop);
+      });
+
+      function jump() {
+        trex.isJumping = true;
+        trex.velocityY = -15;
+      }
+
+      function update() {
+        if (isGameOver) return;
+
+        trex.velocityY += trex.gravity;
+        trex.y += trex.velocityY;
+
+        if (trex.y >= 260) {
+          trex.y = 260;
+          trex.isJumping = false;
+          trex.velocityY = 0;
+        }
+
+        if (frameCount % 100 === 0) {
+          let canSpawn = true;
+          if (obstacles.length > 0) {
+            let lastObstacle = obstacles[obstacles.length - 1];
+            if (canvas.width - lastObstacle.x < minObstacleDistance) {
+              canSpawn = false;
+            }
+          }
+          if (canSpawn) {
+            let obstacleType = Math.random();
+            let obstacle;
+            if (obstacleType < 0.3) {
+              obstacle = {
+                x: canvas.width,
+                y: Math.random() * 150 + 50,
+                width: 40,
+                height: 20,
+                type: "bird",
+                passed: false,
+              };
+            } else if (obstacleType < 0.6) {
+              obstacle = {
+                x: canvas.width,
+                y: 260,
+                width: 30,
+                height: 40,
+                type: "rock",
+                speed: 3,
+                passed: false,
+              };
+            } else {
+              obstacle = {
+                x: canvas.width,
+                y: 270,
+                width: 30,
+                height: 30,
+                type: "cactus",
+                passed: false,
+              };
+            }
+            obstacles.push(obstacle);
+          }
+        }
+
+        obstacles.forEach((obstacle, index) => {
+          let obstacleSpeedToUse =
+            (obstacle.speed || obstacleSpeed) * gameSpeedMultiplier;
+          obstacle.x -= obstacleSpeedToUse;
+
+          if (obstacle.x + obstacle.width < trex.x && !obstacle.passed) {
+            obstacle.passed = true;
+          }
+
+          if (obstacle.x + obstacle.width < 0) {
+            obstacles.splice(index, 1);
+            if (obstacle.passed) {
+              score++;
+            }
+          }
+
+          let collision = false;
+          if (obstacle.type === "bird") {
+            collision =
+              trex.x < obstacle.x + obstacle.width &&
+              trex.x + trex.width > obstacle.x &&
+              trex.y < obstacle.y + obstacle.height &&
+              trex.y + trex.height > obstacle.y;
+          } else {
+            collision =
+              trex.x < obstacle.x + obstacle.width &&
+              trex.x + obstacle.width > obstacle.x &&
+              trex.y < obstacle.y + obstacle.height &&
+              trex.y + trex.height > obstacle.y;
+          }
+
+          if (collision) {
+            isGameOver = true;
+          }
+        });
+
+        if (frameCount % 500 === 0) {
+          obstacleSpeed += 0.5;
+          gameSpeedMultiplier += 0.1;
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.drawImage(trexImage, trex.x, trex.y, trex.width, trex.height);
+
+        obstacles.forEach((obstacle) => {
+          if (obstacle.type === "rock") {
+            ctx.drawImage(
+              rockImage,
+              obstacle.x,
+              obstacle.y,
+              obstacle.width,
+              obstacle.height
+            );
+          } else if (obstacle.type === "bird") {
+            ctx.drawImage(
+              birdImage,
+              obstacle.x,
+              obstacle.y,
+              obstacle.width,
+              obstacle.height
+            );
+          } else {
+            ctx.fillStyle = "#555";
+            ctx.fillRect(
+              obstacle.x,
+              obstacle.y,
+              obstacle.width,
+              obstacle.height
+            );
+          }
+        });
+
+        ctx.fillStyle = "black";
+        ctx.font = "20px Arial";
+        ctx.fillText("Score: " + score, 10, 30);
+
+        if (isGameOver) {
+          gameOverOverlay.style.display = "flex";
+          finalScoreDisplay.textContent = score;
+        }
+      }
+
+      function gameLoop() {
+        frameCount++;
+        update();
+        draw();
+        if (!isGameOver) {
+          requestAnimationFrame(gameLoop);
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    </script>
+  </body>
+</html>
